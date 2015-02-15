@@ -7,29 +7,48 @@ pb, u = processblock, utils
 
 db = DB(utils.db_path(tempfile.mktemp()))
 
+push_params = [range(1, 3), range(4, 8), range(9, 16), range(17, 32)]
+codesize_params = [[50, 50]]
+
 
 def generate_op_tests():
     outs = {}
     for opcode, (name, inargs, outargs, _) in opcodes.opcodes.items():
+     _subid = 0
+     for push_depths in push_params:
+      for jump_num, code_size in codesize_params:
         if name in ['CALL', 'CREATE', 'CALLCODE', 'LOG', 'POP', 'RETURN', 'STOP', 'INVALID', 'JUMP', 'JUMPI', 'CALLDATALOAD', 'CALLDATACOPY', 'CODECOPY', 'EXTCODECOPY', 'SHA3', 'MLOAD', 'MSTORE', 'MSTORE8', 'SUICIDE']:
             continue
-        if name[:3] in ['PUS', 'DUP', 'SWA', 'LOG']:
+        if name[:3] in ['DUP', 'SWA', 'LOG']:
             continue
-        c = ''
-        for i in range(1000):
-            for _ in range(inargs):
-                v = random.randrange(1, 5) if random.randrange(2) else random.randrange(1, 32)
+        if name == 'SSTORE':
+            jump_num /= 10
+        c = '\x5b'
+        if name[:4] == 'PUSH':
+            if push_depths != push_params[0]:
+                continue
+            for i in range(code_size):
+                v = int(name[4:])
                 w = random.randrange(256**v)
                 c += chr(0x5f + v) + utils.zpad(utils.encode_int(w), v)
-            c += chr(opcode)
-            for _ in range(outargs):
-                c += chr(0x50)
+        else:
+            for i in range(code_size):
+                for _ in range(inargs):
+                    v = push_depths[i * len(push_depths) // code_size]
+                    w = random.randrange(256**v)
+                    c += chr(0x5f + v) + utils.zpad(utils.encode_int(w), v)
+                c += chr(opcode)
+                for _ in range(outargs):
+                    c += chr(0x50)
+        # PUSH1 0 MLOAD . DUP1 . PUSH1 1 ADD PUSH1 0 MSTORE . PUSH2 <jumps> GT PUSH1 0 JUMPI
+        c += '\x60\x00\x51' + '\x80' + '\x60\x01\x01\x60\x00\x52' + \
+            '\x61'+chr(jump_num // 256) + chr(jump_num % 256) + '\x11\x60\x00\x57'
         o = {
             "callcreates": [],
             "env": {
                 "currentCoinbase": "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
                 "currentDifficulty": "256",
-                "currentGasLimit": "1000000",
+                "currentGasLimit": "1000000000",
                 "currentNumber": "257",
                 "currentTimestamp": "1",
                 "previousHash": "5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
@@ -39,7 +58,7 @@ def generate_op_tests():
                 "caller": "0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6",
                 "code": "0x"+c.encode('hex'),
                 "data": "0x",
-                "gas": "10000",
+                "gas": "1000000",
                 "gasPrice": "100000000000000",
                 "origin": "cd1722f3947def4cf144679da39c4c32bdc35681",
                 "value": "1000000000000000000"
@@ -106,7 +125,8 @@ def generate_op_tests():
             vm.vm_execute(ext, msg, exek['code'][2:].decode('hex'))
 
         o['post'] = blk.to_dict(True)['state']
-        outs[name] = o
+        outs[name+str(_subid)] = o
+        _subid += 1
     return outs
 
 print json.dumps(generate_op_tests(), indent=4)

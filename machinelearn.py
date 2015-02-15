@@ -24,7 +24,10 @@ def machine_learn_gascosts(jsondata):
         xs.append(datum)
     ys = times
     weights = [0.0001] * len(keys)
-    for i in range(200):
+    factor = 0.00000001
+    score = 999999999999
+    for i in range(1000):
+        oldscore = score
         score = 0
         scoreprime = [0] * len(weights)
         for x, y in zip(xs, ys):
@@ -34,14 +37,19 @@ def machine_learn_gascosts(jsondata):
             score += (tot - y) ** 2 / y
             for j, (w, v) in enumerate(zip(weights, x)):
                 scoreprime[j] += v * 2 * (tot - y) / y
+        if score > oldscore:
+            factor /= 2
+        else:
+            factor *= 1.05
         for j in range(len(weights)):
-            weights[j] -= 0.00000001 * spow(scoreprime[j], 0.5)
+            weights[j] -= factor * spow(scoreprime[j], 1)
             weights[j] = max(0, weights[j])
         if i % 1 == 0:
             print "Finished %d rounds, score %f" % (i + 1, score)
+            # print 'Score prime: %r' % scoreprime
     o = {}
     for w, op in zip(weights, keys):
-        o[op] = w
+        o[op] = int(w * 10000000)
     return {"score": score, "out": o}
 
 print machine_learn_gascosts(json.loads(open(sys.argv[1]).read()))
