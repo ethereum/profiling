@@ -181,4 +181,4 @@ def prepare_files(vm_files):
     #             o.pop()
     return o
 
-print json.dumps(prepare_files(recursive_list(sys.args[1])), indent=4)
+print json.dumps(prepare_files(recursive_list(sys.argv[1])), indent=4)
